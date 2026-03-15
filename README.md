@@ -12,7 +12,7 @@ This project blends photorealistic night-race aesthetics with holographic SVG te
 
 ## 🎬 Cinematic Site Preview
 
-![F1 Site Animation Recording](/C:/Users/KAVYA/.gemini/antigravity/brain/17e0e397-c46d-4742-a8c2-9244928203c7/f1_repeat_fix_verify_1773558192119.webp)
+![F1 Site Animation Recording](Apex F1- Perview v1.1)
 
 ---
 
