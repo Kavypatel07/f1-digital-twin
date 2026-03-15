@@ -12,19 +12,18 @@ This project blends photorealistic night-race aesthetics with holographic SVG te
 
 ## 🎬 Cinematic Site Preview
 
-![F1 Site Animation Recording]()
+<img src="Apex F1- Perview v1.1.gif" width="400" alt="Description of the animation" />
 
 ---
 
 ## 📸 Snapshots of the Action
 
-````carousel
-![Side-by-Side Battle](/C:/Users/KAVYA/.gemini/antigravity/brain/17e0e397-c46d-4742-a8c2-9244928203c7/battle_8_5s_1773553048833.png)
-<!-- slide -->
-![Post-Crash Overtake & Rank Drop](/C:/Users/KAVYA/.gemini/antigravity/brain/17e0e397-c46d-4742-a8c2-9244928203c7/after_rank_drop_1773558353084.png)
-<!-- slide -->
-![Live Leaderboard Reset](/C:/Users/KAVYA/.gemini/antigravity/brain/17e0e397-c46d-4742-a8c2-9244928203c7/reset_verification_1773558437775.png)
-````
+
+<img src="Apex F1- sample v1.1.png" width="500" alt="image" />
+
+<img src="Apex F1- sample v1.2.png" width="500" alt="image" />
+
+<img src="Apex F1- sample v1.3.png" width="500" alt="image" />
 
 ---
 
