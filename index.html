@@ -1,0 +1,649 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width,initial-scale=1.0"/>
+  <title>Apex Overdrive — F1 Live Telemetry</title>
+  <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700;900&family=Rajdhani:wght@400;600;700&display=swap" rel="stylesheet"/>
+  <style>
+    *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+    :root{--cyan:#00f0ff;--navy:#1a2aff;--orange:#ff6a00;--yellow:#ffe500;--glass-bg:rgba(0,10,20,0.65);--glass-border:rgba(0,240,255,0.22)}
+    html,body{width:100%;height:100%;overflow:hidden;background:#000;font-family:'Rajdhani',sans-serif;color:#e0f7ff}
+
+    /* BG */
+    #bg{position:fixed;inset:0;z-index:0;background:url('marina-bay-bg.png') center/cover no-repeat}
+    #bg::after{content:'';position:absolute;inset:0;background:linear-gradient(135deg,rgba(0,0,0,0.75) 0%,rgba(0,10,30,0.5) 50%,rgba(0,0,0,0.80) 100%)}
+
+    /* TRACK — wider to fit 4 sublanes */
+    #track-wrap{position:fixed;left:50%;top:0;transform:translateX(-50%);width:600px;height:100vh;z-index:5;overflow:hidden;pointer-events:none;perspective:1000px}
+    .track-lane{position:absolute;top:-100%;left:0;right:0;height:300%;
+      background:repeating-linear-gradient(to bottom,transparent 0,transparent 58px,rgba(255,255,255,0.05) 58px,rgba(255,255,255,0.05) 62px),
+                 linear-gradient(to bottom,#0a0a0a,#151515 50%,#0a0a0a);
+      animation:scrollTrack .55s linear infinite;
+      transform:rotateX(25deg);
+      transform-origin:center top;
+      filter:blur(0.5px); /* subtle motion blur */}
+    @keyframes scrollTrack{from{transform:rotateX(25deg) translateY(0)}to{transform:rotateX(25deg) translateY(33.333%)}}
+    .tbl{position:absolute;top:0;width:4px;height:100%;background:var(--cyan);box-shadow:0 0 18px 5px var(--cyan),0 0 44px 10px rgba(0,240,255,0.38);animation:bp 2s ease-in-out infinite alternate}
+    .tbl.tl_side{left:0}.tbl.tr_side{right:0}
+    /* Centre divider — subtle */
+    .cdiv{position:absolute;top:0;left:50%;width:1px;height:100%;background:rgba(0,240,255,0.12)}
+    @keyframes bp{from{opacity:.65}to{opacity:1}}
+
+    /* CARS container — matches track perspective */
+    #cars{position:fixed;left:50%;transform:translateX(-50%);width:600px;height:100vh;top:0;z-index:20;pointer-events:none;perspective:1000px}
+    .f1-car{position:absolute;width:48px;height:90px;transform-origin:center center;transform-style:preserve-3d}
+    .f1-car.dmg{animation:shk .14s infinite;filter:drop-shadow(0 0 18px #ff0030) drop-shadow(0 0 40px #ff4400)!important}
+    @keyframes shk{0%,100%{transform-origin:center center;--dx:-2px}50%{--dx:2px}}
+
+    /* Spark */
+    .spark{position:absolute;border-radius:50%;border:2px solid var(--yellow);opacity:0;pointer-events:none}
+
+    /* HOLO MAP */
+    #holo{position:fixed;right:16px;top:50%;transform:translateY(-50%);width:400px;height:290px;z-index:30;opacity:.84;pointer-events:none;filter:drop-shadow(0 0 8px #00f0ff) drop-shadow(0 0 22px rgba(0,240,255,.45));animation:hf 4s ease-in-out infinite alternate}
+    @keyframes hf{from{transform:translateY(-50%) translateY(-6px)}to{transform:translateY(-50%) translateY(6px)}}
+
+    /* HUD */
+    #hud{position:fixed;left:16px;top:50%;transform:translateY(-50%);z-index:40;width:268px;display:flex;flex-direction:column;gap:9px}
+    .gp{background:var(--glass-bg);border:1px solid var(--glass-border);border-radius:10px;padding:13px 15px;backdrop-filter:blur(14px) saturate(1.4);box-shadow:0 0 22px rgba(0,240,255,.1),inset 0 1px 0 rgba(255,255,255,.06)}
+    .rt{font-family:'Orbitron',sans-serif;font-size:9px;letter-spacing:2px;color:var(--cyan);text-transform:uppercase;margin-bottom:2px}
+    .rn{font-family:'Orbitron',sans-serif;font-size:14px;font-weight:900;color:#fff;line-height:1.1}
+    .rl{font-size:11px;color:rgba(200,240,255,.65);margin-top:4px}.rl span{color:var(--cyan);font-weight:700}
+    .sd{display:inline-block;width:7px;height:7px;border-radius:50%;background:#00ff88;box-shadow:0 0 8px #00ff88;animation:sb 1s ease-in-out infinite alternate;margin-right:4px;vertical-align:middle}
+    @keyframes sb{from{opacity:1}to{opacity:.3}}
+    .lbt{font-family:'Orbitron',sans-serif;font-size:9px;letter-spacing:2px;color:var(--cyan);text-transform:uppercase;margin-bottom:9px}
+    #lb-rows{display:flex;flex-direction:column;gap:5px}
+    .lbr{display:flex;align-items:center;gap:7px;padding:6px 8px;border-radius:6px;background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.07);transition:background .4s,border-color .4s}
+    .lbr.lead{background:rgba(0,240,255,.08);border-color:rgba(0,240,255,.28);box-shadow:0 0 10px rgba(0,240,255,.09)}
+    .lbp{font-family:'Orbitron',sans-serif;font-size:12px;font-weight:900;color:rgba(200,240,255,.65);width:18px;flex-shrink:0}
+    .lbc{width:4px;height:26px;border-radius:2px;flex-shrink:0}
+    .lbn{font-family:'Orbitron',sans-serif;font-size:10px;font-weight:700;flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+    .lbtm{font-size:9px;color:rgba(180,220,240,.5)}
+    .lbg{font-family:'Orbitron',sans-serif;font-size:9px;color:rgba(180,220,240,.5);text-align:right;flex-shrink:0}
+    .lbg.lg{color:var(--cyan);font-weight:700}
+
+    /* Yellow flag */
+    #yf{display:none;padding:9px 13px;border-radius:8px;background:rgba(255,229,0,.14);border:1.5px solid var(--yellow);box-shadow:0 0 18px rgba(255,229,0,.3);font-family:'Orbitron',sans-serif;font-size:11px;font-weight:900;color:var(--yellow);letter-spacing:2px;text-align:center;animation:fp .7s ease-in-out infinite alternate}
+    #yf.on{display:block}
+    @keyframes fp{from{opacity:1;box-shadow:0 0 18px rgba(255,229,0,.3)}to{opacity:.55;box-shadow:0 0 36px rgba(255,229,0,.55)}}
+
+    /* Overtake banner */
+    #otk{position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);z-index:50;font-family:'Orbitron',sans-serif;font-size:24px;font-weight:900;letter-spacing:4px;color:#fff;text-shadow:0 0 28px var(--cyan);background:rgba(0,230,255,.1);border:2px solid var(--cyan);border-radius:8px;padding:12px 32px;opacity:0;pointer-events:none;transition:opacity .3s;white-space:nowrap}
+    #otk.on{opacity:1}
+
+    /* Tire panel */
+    #tire{position:fixed;bottom:14px;left:50%;transform:translateX(-50%);z-index:40;width:500px}
+    .tt{font-family:'Orbitron',sans-serif;font-size:9px;letter-spacing:2px;color:var(--cyan);text-transform:uppercase;margin-bottom:7px}
+    .tr{display:flex;align-items:center;gap:9px;font-size:11px;padding:5px 8px;border-radius:5px;background:rgba(255,255,255,.03);margin-bottom:4px}
+    .tp{width:16px;color:rgba(200,240,255,.5);font-size:9px;font-family:'Orbitron',sans-serif}
+    .tn{flex:1;font-weight:600}
+    .tb{padding:2px 8px;border-radius:10px;font-size:8px;font-weight:700;letter-spacing:1px;font-family:'Orbitron',sans-serif;flex-shrink:0}
+    .ts{background:rgba(255,0,60,.28);color:#ff6080;border:1px solid rgba(255,0,60,.5)}
+    .tm{background:rgba(255,200,0,.18);color:#ffd080;border:1px solid rgba(255,200,0,.5)}
+    .th{background:rgba(180,180,200,.18);color:#c8c8d8;border:1px solid rgba(180,180,200,.4)}
+    .tl{width:88px;height:5px;border-radius:3px;background:rgba(255,255,255,.1);overflow:hidden;flex-shrink:0}
+    .tlf{height:100%;border-radius:3px;transition:width 0.8s}
+    .tpc{width:28px;font-size:9px;color:rgba(180,220,240,.5);font-family:'Orbitron',sans-serif;text-align:right;flex-shrink:0}
+
+    /* Top badge */
+    #top-badge{position:fixed;top:16px;left:50%;transform:translateX(-50%);z-index:40;font-family:'Orbitron',sans-serif;font-size:10px;font-weight:700;letter-spacing:3px;color:var(--cyan);padding:6px 20px;border:1px solid var(--glass-border);border-radius:20px;background:var(--glass-bg);backdrop-filter:blur(12px);white-space:nowrap}
+
+    /* Speed */
+    #spd{position:fixed;right:16px;bottom:28px;z-index:40;text-align:right}
+    .sv{font-family:'Orbitron',sans-serif;font-size:40px;font-weight:900;color:#fff;line-height:1;text-shadow:0 0 18px var(--cyan)}
+    .su{font-family:'Rajdhani',sans-serif;font-size:12px;color:var(--cyan);letter-spacing:2px}
+
+    /* DRS */
+    #drs{position:fixed;right:16px;bottom:100px;z-index:40;font-family:'Orbitron',sans-serif;font-size:9px;font-weight:900;letter-spacing:2px;padding:5px 11px;border-radius:6px;background:rgba(0,255,100,.14);border:1.5px solid #00ff66;color:#00ff66;box-shadow:0 0 14px rgba(0,255,100,.28);animation:dg 1.2s ease-in-out infinite alternate}
+    @keyframes dg{from{box-shadow:0 0 14px rgba(0,255,100,.28)}to{box-shadow:0 0 28px rgba(0,255,100,.55)}}
+  </style>
+</head>
+<body>
+
+<div id="bg"></div>
+<div id="top-badge">⬡ APEX OVERDRIVE — SINGAPORE DISTRICT — LAP 34/61</div>
+<div id="otk">OVERTAKE — P1 CHANGE</div>
+<div id="drs">DRS OPEN</div>
+<div id="spd"><div class="sv" id="sv">287</div><div class="su">KM/H</div></div>
+
+<!-- TRACK -->
+<div id="track-wrap">
+  <div class="track-lane"></div>
+  <div class="tbl tl_side"></div>
+  <div class="tbl tr_side"></div>
+  <div class="cdiv"></div>
+</div>
+
+<!-- ALL CARS in one 480px container -->
+<div id="cars">
+  <!-- LEFT BATTLE: McLaren (Orange) vs Red Bull (Navy) -->
+  <!-- McLaren stays in LEFT sublane (x≈60-110px) -->
+  <svg id="cm" class="f1-car" viewBox="0 0 48 90" fill="none" style="filter:drop-shadow(0 0 10px #ff6a00)">
+    <rect x="4" y="74" width="40" height="6" rx="2" fill="#ff6a00" opacity=".9"/>
+    <rect x="14" y="18" width="20" height="60" rx="8" fill="#e85500"/>
+    <rect x="16" y="20" width="16" height="56" rx="6" fill="#ff6a00" opacity=".7"/>
+    <ellipse cx="24" cy="42" rx="7" ry="11" fill="#1a0a00"/>
+    <ellipse cx="24" cy="42" rx="5" ry="9" fill="#004060" opacity=".8"/>
+    <path d="M17 38 Q24 32 31 38" stroke="#cc4400" stroke-width="2.5" fill="none"/>
+    <rect x="8" y="10" width="32" height="5" rx="2" fill="#ff6a00" opacity=".85"/>
+    <rect x="4" y="12" width="40" height="3" rx="1" fill="#ffaa44" opacity=".4"/>
+    <rect x="6" y="38" width="8" height="22" rx="4" fill="#cc4400"/>
+    <rect x="34" y="38" width="8" height="22" rx="4" fill="#cc4400"/>
+    <rect x="2" y="22" width="10" height="14" rx="4" fill="#1a1a1a" stroke="#444" stroke-width="1"/>
+    <rect x="36" y="22" width="10" height="14" rx="4" fill="#1a1a1a" stroke="#444" stroke-width="1"/>
+    <rect x="2" y="60" width="10" height="16" rx="4" fill="#1a1a1a" stroke="#444" stroke-width="1"/>
+    <rect x="36" y="60" width="10" height="16" rx="4" fill="#1a1a1a" stroke="#444" stroke-width="1"/>
+  </svg>
+
+  <!-- Red Bull sweeps to RIGHT sublane (x≈170-230px) during overtake -->
+  <svg id="cr" class="f1-car" viewBox="0 0 48 90" fill="none" style="filter:drop-shadow(0 0 10px #1a2aff)">
+    <rect x="4" y="74" width="40" height="6" rx="2" fill="#0a0a5e" opacity=".9"/>
+    <rect x="14" y="18" width="20" height="60" rx="8" fill="#0d1b8e"/>
+    <rect x="18" y="18" width="12" height="60" rx="6" fill="#2244ff" opacity=".7"/>
+    <ellipse cx="24" cy="42" rx="7" ry="11" fill="#040418"/>
+    <ellipse cx="24" cy="42" rx="5" ry="9" fill="#002266" opacity=".8"/>
+    <path d="M17 38 Q24 32 31 38" stroke="#0040cc" stroke-width="2.5" fill="none"/>
+    <rect x="8" y="10" width="32" height="5" rx="2" fill="#0d1b8e" opacity=".9"/>
+    <rect x="4" y="12" width="40" height="3" rx="1" fill="#4466ff" opacity=".4"/>
+    <rect x="6" y="38" width="8" height="22" rx="4" fill="#0a1870"/>
+    <rect x="34" y="38" width="8" height="22" rx="4" fill="#0a1870"/>
+    <rect x="2" y="22" width="10" height="14" rx="4" fill="#0a0a18" stroke="#333" stroke-width="1"/>
+    <rect x="36" y="22" width="10" height="14" rx="4" fill="#0a0a18" stroke="#333" stroke-width="1"/>
+    <rect x="2" y="60" width="10" height="16" rx="4" fill="#0a0a18" stroke="#333" stroke-width="1"/>
+    <rect x="36" y="60" width="10" height="16" rx="4" fill="#0a0a18" stroke="#333" stroke-width="1"/>
+  </svg>
+
+  <!-- RIGHT BATTLE: Mercedes (Teal) vs Ferrari (Red) -->
+  <svg id="cme" class="f1-car" viewBox="0 0 48 90" fill="none" style="filter:drop-shadow(0 0 10px #00c4b4)">
+    <rect x="4" y="74" width="40" height="6" rx="2" fill="#004d44" opacity=".9"/>
+    <rect x="14" y="18" width="20" height="60" rx="8" fill="#006b61"/>
+    <rect x="18" y="18" width="12" height="60" rx="6" fill="#00c4b4" opacity=".65"/>
+    <ellipse cx="24" cy="42" rx="7" ry="11" fill="#051210"/>
+    <ellipse cx="24" cy="42" rx="5" ry="9" fill="#003830" opacity=".8"/>
+    <path d="M17 38 Q24 32 31 38" stroke="#00a090" stroke-width="2.5" fill="none"/>
+    <rect x="8" y="10" width="32" height="5" rx="2" fill="#006b61" opacity=".9"/>
+    <rect x="4" y="12" width="40" height="3" rx="1" fill="#00e8d8" opacity=".35"/>
+    <rect x="6" y="38" width="8" height="22" rx="4" fill="#005548"/>
+    <rect x="34" y="38" width="8" height="22" rx="4" fill="#005548"/>
+    <rect x="2" y="22" width="10" height="14" rx="4" fill="#0a1a18" stroke="#333" stroke-width="1"/>
+    <rect x="36" y="22" width="10" height="14" rx="4" fill="#0a1a18" stroke="#333" stroke-width="1"/>
+    <rect x="2" y="60" width="10" height="16" rx="4" fill="#0a1a18" stroke="#333" stroke-width="1"/>
+    <rect x="36" y="60" width="10" height="16" rx="4" fill="#0a1a18" stroke="#333" stroke-width="1"/>
+  </svg>
+
+  <svg id="cf" class="f1-car" viewBox="0 0 48 90" fill="none" style="filter:drop-shadow(0 0 10px #ff0030)">
+    <rect x="4" y="74" width="40" height="6" rx="2" fill="#8b0000" opacity=".9"/>
+    <rect x="14" y="18" width="20" height="60" rx="8" fill="#cc0020"/>
+    <rect x="18" y="18" width="12" height="60" rx="6" fill="#ff0030" opacity=".7"/>
+    <ellipse cx="24" cy="42" rx="7" ry="11" fill="#180000"/>
+    <ellipse cx="24" cy="42" rx="5" ry="9" fill="#550010" opacity=".8"/>
+    <path d="M17 38 Q24 32 31 38" stroke="#dd0020" stroke-width="2.5" fill="none"/>
+    <rect x="8" y="10" width="32" height="5" rx="2" fill="#cc0020" opacity=".9"/>
+    <rect x="4" y="12" width="40" height="3" rx="1" fill="#ff4060" opacity=".35"/>
+    <rect x="6" y="38" width="8" height="22" rx="4" fill="#aa0018"/>
+    <rect x="34" y="38" width="8" height="22" rx="4" fill="#aa0018"/>
+    <rect x="2" y="22" width="10" height="14" rx="4" fill="#180000" stroke="#333" stroke-width="1"/>
+    <rect x="36" y="22" width="10" height="14" rx="4" fill="#180000" stroke="#333" stroke-width="1"/>
+    <rect x="2" y="60" width="10" height="16" rx="4" fill="#180000" stroke="#333" stroke-width="1"/>
+    <rect x="36" y="60" width="10" height="16" rx="4" fill="#180000" stroke="#333" stroke-width="1"/>
+  </svg>
+
+  <!-- Spark rings (for Ferrari crash) -->
+  <div id="sp1" class="spark" style="width:80px;height:80px;"></div>
+  <div id="sp2" class="spark" style="width:130px;height:130px;"></div>
+  <div id="sp3" class="spark" style="width:200px;height:200px;"></div>
+</div>
+
+<!-- HOLOGRAPHIC CIRCUIT SVG -->
+<svg id="holo" viewBox="0 0 800 560" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <filter id="gf" x="-40%" y="-40%" width="180%" height="180%">
+      <feGaussianBlur stdDeviation="4" result="b1"/>
+      <feGaussianBlur stdDeviation="10" in="SourceGraphic" result="b2"/>
+      <feComposite in="b2" in2="b1" operator="over" result="c"/>
+      <feComposite in="SourceGraphic" in2="c" operator="over"/>
+    </filter>
+    <filter id="dg" x="-200%" y="-200%" width="500%" height="500%">
+      <feGaussianBlur stdDeviation="5"/>
+    </filter>
+    <linearGradient id="tg" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#00f0ff"/>
+      <stop offset="50%" stop-color="#00aaff" stop-opacity=".8"/>
+      <stop offset="100%" stop-color="#00f0ff"/>
+    </linearGradient>
+  </defs>
+
+  <!-- Track glow fill -->
+  <path d="M420,60 L600,60 L650,80 L680,110 L680,170 L660,200 L720,240 L740,280 L720,320 L680,340 L660,380 L680,420 L660,460 L600,490 L540,490 L500,470 L460,490 L380,490 L320,460 L300,400 L280,360 L240,340 L200,360 L160,360 L120,340 L100,300 L100,240 L120,200 L160,180 L200,180 L220,160 L200,120 L220,80 L280,60 L420,60 Z"
+    stroke="rgba(0,240,255,0.22)" stroke-width="22" fill="rgba(0,240,255,0.05)" stroke-linecap="round" stroke-linejoin="round"/>
+  <!-- Track line -->
+  <path d="M420,60 L600,60 L650,80 L680,110 L680,170 L660,200 L720,240 L740,280 L720,320 L680,340 L660,380 L680,420 L660,460 L600,490 L540,490 L500,470 L460,490 L380,490 L320,460 L300,400 L280,360 L240,340 L200,360 L160,360 L120,340 L100,300 L100,240 L120,200 L160,180 L200,180 L220,160 L200,120 L220,80 L280,60 L420,60 Z"
+    stroke="url(#tg)" stroke-width="7" fill="none" stroke-linecap="round" stroke-linejoin="round" opacity=".9" filter="url(#gf)"/>
+
+  <!-- DRS zone -->
+  <line x1="282" y1="60" x2="418" y2="60" stroke="#00ff66" stroke-width="3" opacity=".9"/>
+  <text x="350" y="51" font-family="Orbitron,sans-serif" font-size="9" fill="#00ff66" text-anchor="middle" letter-spacing="2">DRS</text>
+
+  <!-- Turn labels -->
+  <text x="688" y="100" font-family="Orbitron,sans-serif" font-size="10" fill="rgba(0,240,255,.65)" letter-spacing="1">T10</text>
+  <text x="746" y="282" font-family="Orbitron,sans-serif" font-size="10" fill="rgba(0,240,255,.65)" letter-spacing="1">T13</text>
+  <text x="58" y="282" font-family="Orbitron,sans-serif" font-size="10" fill="rgba(0,240,255,.65)" text-anchor="end">T3</text>
+  <text x="162" y="172" font-family="Orbitron,sans-serif" font-size="10" fill="rgba(0,240,255,.65)" text-anchor="middle">T2</text>
+
+  <!-- Sector markers -->
+  <line x1="460" y1="55" x2="460" y2="75" stroke="#ffe500" stroke-width="2" opacity=".8"/>
+  <text x="465" y="68" font-family="Orbitron,sans-serif" font-size="8" fill="#ffe500" letter-spacing="1">S1</text>
+  <line x1="720" y1="240" x2="700" y2="240" stroke="#ffe500" stroke-width="2" opacity=".8"/>
+  <text x="702" y="236" font-family="Orbitron,sans-serif" font-size="8" fill="#ffe500" letter-spacing="1">S2</text>
+  <text x="88" y="356" font-family="Orbitron,sans-serif" font-size="8" fill="#ffe500" text-anchor="end">S3</text>
+
+  <!-- 5 DRIVER DOTS -->
+  <!-- 1. Norris / McLaren (Orange) -->
+  <g id="gNOR"><circle id="dNOR" r="9" fill="#ff6a00" filter="url(#dg)"/><circle id="diNOR" r="4" fill="#ffaa44"/><circle id="dpNOR" r="9" fill="none" stroke="#ff6a00" stroke-width="2.5" opacity=".8"/><text id="dlNOR" y="-13" font-family="Orbitron,sans-serif" font-size="8" fill="#ff6a00" text-anchor="middle">NOR</text></g>
+  <!-- 2. Verstappen / Red Bull (Navy) -->
+  <g id="gVER"><circle id="dVER" r="9" fill="#1a2aff" filter="url(#dg)"/><circle id="diVER" r="4" fill="#6688ff"/><circle id="dpVER" r="9" fill="none" stroke="#1a2aff" stroke-width="2.5" opacity=".8"/><text id="dlVER" y="-13" font-family="Orbitron,sans-serif" font-size="8" fill="#6688ff" text-anchor="middle">VER</text></g>
+  <!-- 3. Hamilton / Ferrari (Red) -->
+  <g id="gHAM"><circle id="dHAM" r="8" fill="#ff0030" filter="url(#dg)"/><circle id="diHAM" r="3.5" fill="#ff6080"/><circle id="dpHAM" r="8" fill="none" stroke="#ff0030" stroke-width="2" opacity=".7"/><text id="dlHAM" y="-12" font-family="Orbitron,sans-serif" font-size="7" fill="#ff4060" text-anchor="middle">HAM</text></g>
+  <!-- 4. Perez / Red Bull (Purple-blue) -->
+  <g id="gPER"><circle id="dPER" r="8" fill="#5533ff" filter="url(#dg)"/><circle id="diPER" r="3.5" fill="#8877ff"/><circle id="dpPER" r="8" fill="none" stroke="#5533ff" stroke-width="2" opacity=".7"/><text id="dlPER" y="-12" font-family="Orbitron,sans-serif" font-size="7" fill="#8877ff" text-anchor="middle">PER</text></g>
+  <!-- 5. Sainz / Williams (Light blue) -->
+  <g id="gSAI"><circle id="dSAI" r="8" fill="#60aaff" filter="url(#dg)"/><circle id="diSAI" r="3.5" fill="#90ccff"/><circle id="dpSAI" r="8" fill="none" stroke="#60aaff" stroke-width="2" opacity=".7"/><text id="dlSAI" y="-12" font-family="Orbitron,sans-serif" font-size="7" fill="#90ccff" text-anchor="middle">SAI</text></g>
+
+  <text x="400" y="535" font-family="Orbitron,sans-serif" font-size="9" fill="rgba(0,240,255,.5)" text-anchor="middle" letter-spacing="3">MARINA BAY STREET CIRCUIT</text>
+</svg>
+
+<!-- HUD -->
+<div id="hud">
+  <div class="gp">
+    <div class="rt"><span class="sd"></span>RACE STATUS — LIVE</div>
+    <div class="rn">APEX OVERDRIVE<br>GRAND PRIX</div>
+    <div class="rl">Lap <span>34</span> / 61 &nbsp;·&nbsp; Round 15</div>
+  </div>
+  <div id="yf">⚠ YELLOW FLAG ⚠<br><span style="font-size:8px;letter-spacing:1px;opacity:.8">INCIDENT: TURN 9</span></div>
+  <div class="gp">
+    <div class="lbt">LIVE LEADERBOARD</div>
+    <div id="lb-rows"></div>
+  </div>
+</div>
+
+<!-- TIRE PANEL -->
+<div id="tire"><div class="gp">
+  <div class="tt">⬡ Current Tire Strategy — Top 5</div>
+  <div id="tire-inner"></div>
+</div></div>
+
+<script>
+// ── LEADERBOARD ─────────────────────────────────────────────────────
+// Initial: Norris LEADS (McLaren is AHEAD on track), Verstappen P2
+const LB_INIT = [
+  {n:'Norris',    t:'McLaren',  c:'#ff6a00', g:'LEADER', p:2},
+  {n:'Verstappen',t:'Red Bull', c:'#1a2aff', g:'+0.342', p:2},
+  {n:'Hamilton',  t:'Ferrari',  c:'#ff0030', g:'+3.181', p:3},
+  {n:'Perez',     t:'Red Bull', c:'#5533ff', g:'+6.427', p:2},
+  {n:'Sainz',     t:'Williams', c:'#60aaff', g:'+9.053', p:1},
+];
+const LB_OTK = [
+  {n:'Verstappen',t:'Red Bull', c:'#1a2aff', g:'LEADER', p:2},
+  {n:'Norris',    t:'McLaren',  c:'#ff6a00', g:'+0.189', p:2},
+  {n:'Hamilton',  t:'Ferrari',  c:'#ff0030', g:'+3.181', p:3},
+  {n:'Perez',     t:'Red Bull', c:'#5533ff', g:'+6.427', p:2},
+  {n:'Sainz',     t:'Williams', c:'#60aaff', g:'+9.053', p:1},
+];
+const LB_POST_CRASH = [
+  {n:'Verstappen',t:'Red Bull', c:'#1a2aff', g:'LEADER', p:2},
+  {n:'Norris',    t:'McLaren',  c:'#ff6a00', g:'+0.189', p:2},
+  {n:'Perez',     t:'Red Bull', c:'#5533ff', g:'+4.215', p:2},
+  {n:'Sainz',     t:'Williams', c:'#60aaff', g:'+6.332', p:1},
+  {n:'Hamilton',  t:'Ferrari',  c:'#ff0030', g:'RETIRED', p:3},
+];
+
+function renderLB(drivers){
+  const c=document.getElementById('lb-rows');
+  c.innerHTML='';
+  drivers.forEach((d,i)=>{
+    const r=document.createElement('div');
+    r.className='lbr'+(i===0?' lead':'');
+    r.innerHTML=`<div class="lbp">${i+1}</div>
+      <div class="lbc" style="background:${d.c};box-shadow:0 0 7px ${d.c}88"></div>
+      <div><div class="lbn" style="color:${d.c}">${d.n.toUpperCase()}</div><div class="lbtm">${d.t}</div></div>
+      <div style="margin-left:auto;text-align:right">
+        <div class="lbg${i===0?' lg':''}">${d.g}</div>
+        <div style="font-size:8px;color:rgba(180,220,240,.4);font-family:'Orbitron',sans-serif">${d.p} PIT</div>
+      </div>`;
+    c.appendChild(r);
+  });
+}
+renderLB(LB_INIT);
+// Note: renderTirePanel() is called after its definition below
+
+// ── TIRE LIVE DEGRADATION ────────────────────────────────────────────
+// Only running cars degrade; Ferrari (crashes at 10.6s) stops and shows RETIRED
+const TIRE_START = {nor:45,ver:82,ham:38,per:70,sai:58};
+let tire={...TIRE_START};
+let ferrariRetired=false;
+let lbState = 'INIT'; // 'INIT', 'OTK', 'POST_CRASH'
+
+function updateTires(){
+  // Only degrade running cars
+  ['nor','ver','per','sai'].forEach(d=>{
+    tire[d]=Math.max(0,tire[d]-0.5);
+  });
+  renderTirePanel(lbState, ferrariRetired);
+}
+setInterval(updateTires,1000);
+
+// Render tire panel in leaderboard rank order
+function renderTirePanel(state, isRetired){
+  const container=document.getElementById('tire-inner');
+  if(!container)return;
+  const tireData={
+    nor:{name:'Norris',    color:'#ff6a00', compound:'SOFT', cls:'ts', bgGrad:'linear-gradient(90deg,#ff6080,#ff0030)', key:'nor'},
+    ver:{name:'Verstappen',color:'#1a2aff', compound:'MED',  cls:'tm', bgGrad:'linear-gradient(90deg,#ffd080,#ffaa00)', key:'ver'},
+    ham:{name:'Hamilton',  color:'#ff0030', compound:'SOFT', cls:'ts', bgGrad:'linear-gradient(90deg,#ff6080,#ff0030)', key:'ham'},
+    per:{name:'Perez',     color:'#5533ff', compound:'HARD', cls:'th', bgGrad:'linear-gradient(90deg,#c8c8d8,#888)',    key:'per'},
+    sai:{name:'Sainz',     color:'#60aaff', compound:'HARD', cls:'th', bgGrad:'linear-gradient(90deg,#c8c8d8,#888)',    key:'sai'},
+  };
+  
+  // Rank order for the strategy panel
+  let order = ['nor','ver','ham','per','sai'];
+  if(state === 'OTK') order = ['ver','nor','ham','per','sai'];
+  if(state === 'POST_CRASH') order = ['ver','nor','per','sai','ham'];
+
+  container.innerHTML='';
+  order.forEach((key,i)=>{
+    const d=tireData[key];
+    const lifeVal = Math.round(tire[key]);
+    
+    // Hamilton (HAM) drives the Ferrari which crashes
+    const isCrashed = isRetired && key === 'ham';
+    
+    const row = document.createElement('div');
+    row.className = 'tr';
+    if(isCrashed){
+      row.style.opacity = '0.7';
+      row.style.border = '1px solid rgba(255,0,0,0.3)';
+      row.innerHTML = `
+        <div class="tp">${i+1}.</div>
+        <div class="tn" style="color:${d.color}">${d.name}</div>
+        <div class="tb" style="background:rgba(255,0,0,0.3);color:#ff4d4d;border:1px solid #ff0000;animation:sb 0.5s infinite alternate">RETD</div>
+        <div class="tl"><div class="tlf" style="width:0%;background:#ff0000"></div></div>
+        <div class="tpc" style="color:#ff4d4d">0%</div>`;
+    } else {
+      row.innerHTML = `
+        <div class="tp">${i+1}.</div>
+        <div class="tn" style="color:${d.color}">${d.name}</div>
+        <div class="tb ${d.cls}">${d.compound}</div>
+        <div class="tl"><div class="tlf" id="tf-${key}" style="width:${lifeVal}%;background:${d.bgGrad}"></div></div>
+        <div class="tpc" id="tp-${key}">${lifeVal}%</div>`;
+    }
+    container.appendChild(row);
+  });
+}
+
+// ── SPEED COUNTER ────────────────────────────────────────────────────
+let spBase=287;
+const svEl=document.getElementById('sv');
+setInterval(()=>{ svEl.textContent=Math.round(spBase+(Math.random()-.5)*22); },80);
+
+// ── CAR PHYSICS ─────────────────────────────────────────────────────
+// Coordinate system: top=vh from top, left=px from left of 480px container
+// Left battle sublanes: McLaren at x≈60, RedBull overtakes at x≈185
+// Right battle sublanes: Mercedes at x≈340, Ferrari attacks at x≈245, crashes to x≈130
+const LOOP=15000;
+
+// McLaren (Orange) — P1 leader, then drops back
+const KF_MC=[
+  [0,    28, 100, 0],   
+  [7,    28, 100, 0],
+  [8.5,  28, 100, 2],    
+  [9.5,  34, 100, 0],    // peak of side-by-side battle
+  [10.5, 42, 100, 0],    // Red Bull clears him
+  [14.5, 28, 100, 0],
+  [15,   28, 100, 0],
+];
+
+// Red Bull (Navy) — P2, side-by-side battle at x=160
+const KF_RB=[
+  [0,    58, 100,  0],   
+  [4,    45, 100,  0],   
+  [7.5,  38, 140, -1],   // moving out to battle
+  [9.5,  26, 160,  0],   // PULLS ALONGSIDE - 60px distance (160-100)
+  [11,   14, 130,  0],   // pulling ahead
+  [12.5,  8, 100,  0],   
+  [14.5, 58, 100,  0],   
+  [15,   58, 100,  0],
+];
+
+// Mercedes (Teal) — Right side lead
+const KF_ME=[
+  [0,    25, 340, 0],
+  [7.5,  25, 340, 0],
+  [8,    24, 315, -3],   // Harder defensive dodge
+  [10,   25, 340,  0],
+  [15,   25, 340,  0],
+];
+
+// Ferrari (Red) — The Precise Crash at 10.6s
+const KF_FE=[
+  [0,    52, 340,  0],   
+  [5,    38, 340,  0],   
+  [7,    30, 310,  -3],   
+  [8.2,  27, 280,  -6],   
+  [8.5,  30, 240, -32],   // SNAP
+  [9.8,  46, 160, -90],   
+  [10.5, 62, 110,-130],   
+  [10.6, 65,  95,-140],   // IMPACT SLAM
+  [14,   65,  95,-140],   // STATIC UNTIL LOOP RESET
+  [15,   52, 340,  0],   
+];
+
+function lerp(a,b,t){return a+(b-a)*t}
+function eio(t){return t<.5?2*t*t:-1+(4-2*t)*t}
+
+function getState(kf,t){
+  if(t<=kf[0][0]) return {top:kf[0][1],left:kf[0][2],r:kf[0][3]};
+  if(t>=kf[kf.length-1][0]){const l=kf[kf.length-1];return{top:l[1],left:l[2],r:l[3]}}
+  for(let i=0;i<kf.length-1;i++){
+    const[t0,y0,x0,r0]=kf[i],[t1,y1,x1,r1]=kf[i+1];
+    if(t>=t0&&t<=t1){const e=eio((t-t0)/(t1-t0));return{top:lerp(y0,y1,e),left:lerp(x0,x1,e),r:lerp(r0,r1,e)}}
+  }
+}
+function apCar(el,s){
+  el.style.top=s.top+'vh';
+  el.style.left=s.left+'px';
+  // Apply perspective tilt to individual cars so they lean with the road
+  el.style.transform=`rotateX(25deg) rotateZ(${s.r}deg)`;
+}
+
+// ── CIRCUIT WAYPOINTS ───────────────────────────────────────────────
+const WP=[
+  [420,60],[480,60],[540,60],[600,60],[638,74],[660,92],[675,112],[680,140],[680,170],
+  [668,192],[688,216],[710,240],[730,262],[738,282],[728,305],[710,322],[688,338],
+  [668,360],[672,388],[674,410],[668,440],[650,462],[622,480],[592,490],[560,490],
+  [530,490],[502,470],[480,490],[450,490],[415,490],[380,490],[345,474],[322,460],
+  [308,435],[298,408],[285,378],[262,354],[238,340],[208,352],[180,358],[155,356],
+  [128,342],[108,318],[100,288],[100,258],[108,228],[124,206],[148,190],[168,182],
+  [200,180],[218,162],[212,138],[202,118],[214,88],[238,70],[265,62],[310,60],[370,60],[420,60]
+];
+
+function dotPos(wp,progress){
+  const p=(progress%1+1)%1,tot=wp.length-1,idx=Math.floor(p*tot),nxt=Math.min(idx+1,wp.length-1);
+  const t=p*tot-idx;
+  return[lerp(wp[idx][0],wp[nxt][0],t),lerp(wp[idx][1],wp[nxt][1],t)];
+}
+
+function setDotGroup(pfx,x,y){
+  ['','i','p'].forEach(s=>{
+    const el=document.getElementById(`d${s==='i'?'i':s==='p'?'p':''}${pfx}`);
+    // Use different IDs: dNOR, diNOR, dpNOR
+  });
+  const main=document.getElementById('d'+pfx);
+  const inn=document.getElementById('di'+pfx);
+  const pul=document.getElementById('dp'+pfx);
+  const lbl=document.getElementById('dl'+pfx);
+  if(main){main.setAttribute('cx',x);main.setAttribute('cy',y)}
+  if(inn){inn.setAttribute('cx',x);inn.setAttribute('cy',y)}
+  if(pul){pul.setAttribute('cx',x);pul.setAttribute('cy',y)}
+  if(lbl){lbl.setAttribute('x',x);lbl.setAttribute('y',y-13)}
+}
+
+// ── MAIN LOOP ────────────────────────────────────────────────────────
+const cm=document.getElementById('cm');
+const crb=document.getElementById('cr');
+const cme=document.getElementById('cme');
+const cf=document.getElementById('cf');
+const yf=document.getElementById('yf');
+const otk=document.getElementById('otk');
+const sp=[document.getElementById('sp1'),document.getElementById('sp2'),document.getElementById('sp3')];
+
+let t0=null,yfOn=false,otkShown=false,lbSwapped=false,lastElapsed=0;
+
+function triggerSparks(topVh,leftPx){
+  sp.forEach((ring,i)=>{
+    const sz=parseInt(ring.style.width);
+    ring.style.top=`calc(${topVh}vh - ${sz/2}px)`;
+    ring.style.left=leftPx-sz/2+'px';
+    ring.style.opacity='1';
+    ring.style.boxShadow=`0 0 ${18+i*10}px ${5+i*3}px #ffe500, 0 0 ${30+i*15}px ${8+i*5}px #ff4400`;
+    ring.style.transition='none';
+    setTimeout(()=>{
+      ring.style.transition=`opacity ${0.5+i*.2}s ease-out, transform ${0.5+i*.2}s ease-out`;
+      ring.style.transform=`scale(${2+i*.5})`;
+      ring.style.opacity='0';
+    },30+i*80);
+    // reset transform without transition for next trigger
+    setTimeout(()=>{ring.style.transition='none';ring.style.transform='scale(1)'},1500);
+  });
+}
+
+// Smooth dot relative offsets
+let norOff=0.055,verOff=0.015;
+let ferrariCrashDotPos=null; // frozen position when Ferrari crashes
+let ferrariBlinkOn=true;
+setInterval(()=>{ ferrariBlinkOn=!ferrariBlinkOn; },300); // blink every 300ms
+
+function animate(ts){
+  if(!t0)t0=ts;
+  const elapsed=(ts-t0)%LOOP;
+  const base=elapsed/LOOP; // Define early to prevent ReferenceError
+  const timeS = elapsed / 1000;
+
+  // Cars with Jitter 
+  const jitterVal = (timeS > 4 && timeS < 9) ? (Math.random() - 0.5) * 2 : 0;
+  
+  const mcS = getState(KF_MC, timeS);
+  const rbS = getState(KF_RB, timeS);
+  const meS = getState(KF_ME, timeS);
+  const feS = getState(KF_FE, timeS);
+  
+  apCar(cm,  {...mcS, left: mcS.left + jitterVal});
+  apCar(crb, {...rbS, left: rbS.left + jitterVal/2});
+  apCar(cme, meS);
+  apCar(cf,  feS);
+
+  // Multi-Switch Leaderboard & State handling
+  // 1. Overtake triggers at 9.5s
+  if(elapsed>=9500 && lbState === 'INIT'){
+    lbState = 'OTK';
+    renderLB(LB_OTK);
+    otk.classList.add('on');
+    setTimeout(()=>otk.classList.remove('on'),2500);
+  }
+  // 2. Post-crash rank drop at 12.5s (Hamilton drops to P5)
+  if(elapsed>=12500 && lbState === 'OTK'){
+    lbState = 'POST_CRASH';
+    renderLB(LB_POST_CRASH);
+    renderTirePanel('POST_CRASH', ferrariRetired); // Instant update!
+  }
+  // 3. Reset everything at loop start (Wrap-around detection)
+  if(lastElapsed > elapsed){
+    lbState = 'INIT';
+    tire = {...TIRE_START}; 
+    renderLB(LB_INIT);
+    renderTirePanel('INIT', false);
+    yfOn=false; ferrariRetired=false; ferrariCrashDotPos=null;
+    yf.classList.remove('on');
+    // Force reset dots and car damage 
+    cf.classList.remove('dmg');
+  }
+  lastElapsed = elapsed;
+
+  // Ferrari damage + crash dot freeze at 10.6s
+  if(elapsed>=8500&&elapsed<14000){
+    if(!cf.classList.contains('dmg'))cf.classList.add('dmg');
+    if(elapsed>=10600 && !ferrariRetired){
+       yfOn=true; ferrariRetired=true;
+       yf.classList.add('on');
+       triggerSparks(65, 95); // position from KF_FE at impact
+       ferrariCrashDotPos=dotPos(WP, base - 0.032); // Correct offset for HAM
+       renderTirePanel(lbState, true);
+    }
+    if(elapsed>8500&&elapsed<10600&&Math.random()<0.07)triggerSparks(feS.top,feS.left);
+  } else {
+    cf.classList.remove('dmg');
+  }
+
+  // Speed
+  spBase=elapsed>=6000&&elapsed<=10000?312:elapsed>=3500&&elapsed<6000?296:283;
+
+  // Smooth dot swap: over 7500ms–11500ms redBull smoothly passes Norris
+  if(elapsed>=7500&&elapsed<11500){
+    const pct=eio((elapsed-7500)/4000);
+    norOff=lerp(0.055,0.020,pct);
+    verOff=lerp(0.015,0.058,pct);
+  } else if(elapsed>=11500){norOff=0.020;verOff=0.058}
+  else {norOff=0.055;verOff=0.015}
+
+  // Position all 5 dots
+  const [nx,ny]=dotPos(WP,base+norOff);
+  const [vx,vy]=dotPos(WP,base+verOff);
+  // HAM dot: freeze at crash site when retired, and blink
+  let hx,hy;
+  if(ferrariCrashDotPos){
+    [hx,hy]=ferrariCrashDotPos;
+    // BEEPING DOT EFFECT: Rapid Flash Red/Transparent
+    const isFlash = Math.floor(ts / 80) % 2 === 0;
+    const hamDot=document.getElementById('dHAM');
+    const hamInner=document.getElementById('diHAM');
+    if(hamDot){ 
+      hamDot.setAttribute('opacity', isFlash ? '1' : '0.2'); 
+      hamDot.setAttribute('fill', isFlash ? '#FF0000' : '#880000'); 
+    }
+    if(hamInner){ hamInner.setAttribute('fill', isFlash ? '#FFFFFF' : '#FF0000'); }
+    // Rapid pulse ring
+    const hamPulse=document.getElementById('dpHAM');
+    if(hamPulse){ 
+       hamPulse.setAttribute('stroke', '#FF0000');
+       hamPulse.setAttribute('stroke-width', isFlash ? '6' : '1');
+    }
+  } else {
+    [hx,hy]=dotPos(WP,base-0.032);
+    const hamDot=document.getElementById('dHAM');
+    if(hamDot)hamDot.setAttribute('opacity','0.9');
+  }
+  const [px,py]=dotPos(WP,base-0.074);
+  const [sx,sy]=dotPos(WP,base-0.120);
+
+  setDotGroup('NOR',nx,ny);
+  setDotGroup('VER',vx,vy);
+  setDotGroup('HAM',hx,hy);
+  setDotGroup('PER',px,py);
+  setDotGroup('SAI',sx,sy);
+
+  requestAnimationFrame(animate);
+}
+requestAnimationFrame(animate);
+renderTirePanel(false, false); // initial tire panel (all functions now defined)
+
+// Pulse rings
+let ps=1,pd=1;
+setInterval(()=>{
+  ps+=pd*.07;if(ps>1.65)pd=-1;if(ps<.75)pd=1;
+  ['NOR','VER','HAM','PER','SAI'].forEach(d=>{
+    const el=document.getElementById('dp'+d);
+    if(el){el.setAttribute('r',9*ps);el.setAttribute('opacity',Math.max(0,1.6-ps*.85))}
+  });
+},50);
+</script>
+</body>
+</html>
