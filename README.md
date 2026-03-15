@@ -12,7 +12,7 @@ This project blends photorealistic night-race aesthetics with holographic SVG te
 
 ## 🎬 Cinematic Site Preview
 
-<img src="Apex F1- Perview v1.1.gif" width="400" alt="Description of the animation" />
+<img src="Apex F1- Perview v1.1.gif" width="500" alt="Description of the animation" />
 
 ---
 
